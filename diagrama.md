@@ -18,8 +18,6 @@ En un sistema distribuido, las tareas no tienen que ser realizadas necesariament
 
 ## 2. Diagrama de arquitectura
 
-![Diagrama de arquitectura distribuida](imagenes/diagrama.png)
-
 El diagrama representa una arquitectura de referencia que incluye clientes, un balanceador de carga, servidores trabajadores, una cola de mensajes, una base de datos y un sistema para almacenar archivos.
 
 Cada uno de estos componentes cumple una función determinada dentro del sistema. En conjunto, permiten representar una posible solución para procesar solicitudes de manera distribuida.
