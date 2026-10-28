@@ -1,142 +1,191 @@
+
+# PROGRAMACION SOBRE REDES
+# PFO 3 - Adaptacion del chat del PFO 1
+# Servidor con sockets, cola de tareas, Workers y SQLite.
+
 import socket
+import sqlite3
 import json
 import threading
 import queue
 import time
 from concurrent.futures import ThreadPoolExecutor
-
-# ============================================================
-# CONFIGURACION DEL SERVIDOR
-# ============================================================
+from datetime import datetime
 
 HOST = "127.0.0.1"
 PUERTO = 5000
+NOMBRE_DB = "chat.db"
 
-# Cola donde se guardan las tareas pendientes.
 cola_tareas = queue.Queue()
 
-# Creamos dos Workers.
-# Cada Worker dispone de un pool de dos hilos.
+# Dos grupos de Workers, cada uno con dos hilos.
 workers = [
     ThreadPoolExecutor(max_workers=2),
     ThreadPoolExecutor(max_workers=2)
 ]
 
-# Control para repartir las tareas por turnos.
 contador_workers = 0
 lock_workers = threading.Lock()
-
-# Numeracion de las tareas y los clientes.
-contador_tareas = 0
-contador_clientes = 0
-lock_contadores = threading.Lock()
+lock_db = threading.Lock()
 
 
-def procesar_tarea(tarea, numero_worker, numero_tarea):
-    """Procesa una tarea recibida de un cliente."""
-
-    print(f"\n[WORKER {numero_worker}] Iniciando tarea N.° {numero_tarea}")
-    print(f"[WORKER {numero_worker}] Operacion recibida: {tarea}")
-
-    # Simulamos una tarea que tarda un segundo.
-    time.sleep(1)
+def inicializar_base_datos():
+    """Crea la tabla de mensajes del chat."""
 
     try:
-        partes = tarea.split("+")
+        conexion = sqlite3.connect(NOMBRE_DB)
+        cursor = conexion.cursor()
 
-        if len(partes) != 2:
-            resultado = "Error: ingrese una suma. Ejemplo: 10+5"
-        else:
-            numero1 = float(partes[0].strip())
-            numero2 = float(partes[1].strip())
-            suma = numero1 + numero2
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS mensajes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contenido TEXT NOT NULL,
+                fecha_envio TEXT NOT NULL,
+                ip_cliente TEXT NOT NULL,
+                resultado TEXT,
+                estado TEXT
+            )
+        """)
 
-            # Evitamos mostrar .0 cuando el resultado es entero.
-            if suma.is_integer():
-                suma = int(suma)
+        conexion.commit()
+        conexion.close()
 
-            resultado = f"Resultado de {tarea}: {suma}"
+        print("Base de datos SQLite inicializada.")
+        return True
 
-    except ValueError:
-        resultado = "Error: debe ingresar dos numeros validos."
+    except sqlite3.Error as error:
+        print("Error al inicializar SQLite:", error)
+        return False
 
-    print(f"[WORKER {numero_worker}] Tarea N.° {numero_tarea} finalizada.")
-    print(f"[RESULTADO] Tarea N.° {numero_tarea}: {resultado}")
-    print("-" * 60)
+
+def guardar_mensaje(contenido, ip_cliente):
+    """Guarda el mensaje y devuelve su identificador."""
+
+    fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    try:
+        with lock_db:
+            conexion = sqlite3.connect(NOMBRE_DB)
+            cursor = conexion.cursor()
+
+            cursor.execute("""
+                INSERT INTO mensajes
+                (contenido, fecha_envio, ip_cliente, resultado, estado)
+                VALUES (?, ?, ?, ?, ?)
+            """, (contenido, fecha, ip_cliente, None, "RECIBIDO"))
+
+            id_mensaje = cursor.lastrowid
+            conexion.commit()
+            conexion.close()
+
+        return id_mensaje, fecha
+
+    except sqlite3.Error as error:
+        print("Error al guardar el mensaje:", error)
+        return None, fecha
+
+
+def actualizar_mensaje(id_mensaje, resultado):
+    """Guarda el resultado del procesamiento del mensaje."""
+
+    try:
+        with lock_db:
+            conexion = sqlite3.connect(NOMBRE_DB)
+            cursor = conexion.cursor()
+
+            cursor.execute("""
+                UPDATE mensajes
+                SET resultado = ?, estado = ?
+                WHERE id = ?
+            """, (resultado, "PROCESADO", id_mensaje))
+
+            conexion.commit()
+            conexion.close()
+
+    except sqlite3.Error as error:
+        print("Error al actualizar el mensaje:", error)
+
+
+def procesar_mensaje(mensaje, numero_worker, id_mensaje):
+    """Procesa un mensaje del chat."""
+
+    print(
+        f"[WORKER {numero_worker}] "
+        f"Procesando mensaje #{id_mensaje}: {mensaje}"
+    )
+
+    # Pequeña demora para poder observar el trabajo de los Workers.
+    time.sleep(1)
+
+    resultado = f"Mensaje #{id_mensaje} procesado correctamente."
+    actualizar_mensaje(id_mensaje, resultado)
 
     return resultado
 
 
 def distribuir_tareas():
-    """Asigna las tareas pendientes a los Workers."""
+    """Extrae mensajes de la cola y los asigna a los Workers."""
 
     global contador_workers
 
     while True:
-        tarea, cola_respuesta, numero_tarea = cola_tareas.get()
+        elemento = cola_tareas.get()
+
+        if elemento is None:
+            cola_tareas.task_done()
+            break
+
+        mensaje, id_mensaje, cola_respuesta = elemento
 
         try:
-            # Elegimos el Worker por turnos.
             with lock_workers:
                 numero_worker = contador_workers % len(workers)
                 contador_workers += 1
 
-            numero_grupo = numero_worker + 1
-
-            print(
-                f"[ASIGNACION] Tarea N.° {numero_tarea} "
-                f"asignada al Worker {numero_grupo}."
-            )
-
-            # Enviamos la tarea al pool de hilos del Worker seleccionado.
             trabajo = workers[numero_worker].submit(
-                procesar_tarea,
-                tarea,
-                numero_grupo,
-                numero_tarea
+                procesar_mensaje,
+                mensaje,
+                numero_worker + 1,
+                id_mensaje
             )
 
-            # Esta funcion se ejecuta cuando termina el procesamiento.
             def completar_respuesta(
                 trabajo_terminado,
-                cola=cola_respuesta,
-                numero=numero_tarea
+                respuesta_tarea=cola_respuesta
             ):
                 try:
                     resultado = trabajo_terminado.result()
                 except Exception as error:
-                    resultado = f"Error al procesar la tarea: {error}"
+                    resultado = f"Error al procesar el mensaje: {error}"
 
-                cola.put(resultado)
-
-                print(
-                    f"[RESPUESTA LISTA] Tarea N.° {numero}: "
-                    "resultado preparado para el cliente."
-                )
+                respuesta_tarea.put(resultado)
 
             trabajo.add_done_callback(completar_respuesta)
 
         except Exception as error:
             cola_respuesta.put(
-                f"Error al distribuir la tarea: {error}"
+                f"Error al distribuir el mensaje: {error}"
             )
 
         finally:
             cola_tareas.task_done()
 
 
-def atender_cliente(conexion, direccion, numero_cliente):
-    """Atiende las tareas enviadas por un cliente."""
+def enviar_respuesta(comunicacion, respuesta):
+    """Envía una respuesta JSON al cliente."""
 
-    identificador = f"Cliente {numero_cliente}"
+    datos = json.dumps(respuesta, ensure_ascii=False) + "\n"
+    comunicacion.write(datos.encode("utf-8"))
+    comunicacion.flush()
 
-    print(
-        f"\n[CONEXION] {identificador} conectado desde "
-        f"{direccion[0]}:{direccion[1]}"
-    )
+
+def atender_cliente(conexion, direccion):
+    """Atiende a cada cliente en un hilo independiente."""
+
+    ip_cliente = direccion[0]
+    print(f"[CONEXION] Cliente conectado: {direccion}")
 
     try:
-        # Usamos mensajes terminados en salto de linea.
         with conexion.makefile("rwb") as comunicacion:
 
             while True:
@@ -146,116 +195,86 @@ def atender_cliente(conexion, direccion, numero_cliente):
                     break
 
                 try:
-                    mensaje = json.loads(linea.decode("utf-8"))
-
-                    if not isinstance(mensaje, dict):
-                        respuesta = {
-                            "resultado": "Error: mensaje no valido."
-                        }
-
-                    else:
-                        tarea = mensaje.get("tarea", "")
-
-                        if not isinstance(tarea, str):
-                            respuesta = {
-                                "resultado": "Error: la tarea debe ser texto."
-                            }
-
-                        else:
-                            tarea = tarea.strip()
-
-                            if not tarea:
-                                respuesta = {
-                                    "resultado": "Error: la tarea esta vacia."
-                                }
-
-                            elif tarea.upper() == "SALIR":
-                                respuesta = {
-                                    "resultado": "Conexion finalizada."
-                                }
-
-                                comunicacion.write(
-                                    (
-                                        json.dumps(
-                                            respuesta,
-                                            ensure_ascii=False
-                                        ) + "\n"
-                                    ).encode("utf-8")
-                                )
-                                comunicacion.flush()
-
-                                print(
-                                    f"[CIERRE] {identificador} "
-                                    "solicito finalizar la conexion."
-                                )
-                                break
-
-                            else:
-                                global contador_tareas
-
-                                with lock_contadores:
-                                    contador_tareas += 1
-                                    numero_tarea = contador_tareas
-
-                                print(
-                                    f"\n[TAREA RECIBIDA] N.° {numero_tarea}"
-                                )
-                                print(f"[CLIENTE] {identificador}")
-                                print(f"[OPERACION] {tarea}")
-
-                                # Cola para recibir el resultado de esta tarea.
-                                cola_respuesta = queue.Queue(maxsize=1)
-
-                                # Agregamos la tarea a la cola general.
-                                cola_tareas.put(
-                                    (tarea, cola_respuesta, numero_tarea)
-                                )
-
-                                print(
-                                    f"[COLA] Tarea N.° {numero_tarea} "
-                                    "agregada a la cola de tareas."
-                                )
-
-                                # Esperamos el resultado del Worker.
-                                resultado = cola_respuesta.get()
-
-                                respuesta = {
-                                    "resultado": resultado
-                                }
-
-                                print(
-                                    f"[ENVIO] Resultado de la tarea "
-                                    f"N.° {numero_tarea} enviado a {identificador}."
-                                )
-
+                    mensaje_recibido = json.loads(
+                        linea.decode("utf-8")
+                    )
                 except (json.JSONDecodeError, UnicodeDecodeError):
-                    respuesta = {
-                        "resultado": "Error: el mensaje recibido no es valido."
-                    }
+                    enviar_respuesta(comunicacion, {
+                        "resultado": "Error: mensaje no valido."
+                    })
+                    continue
 
-                # Devolvemos la respuesta al cliente.
-                comunicacion.write(
-                    (
-                        json.dumps(
-                            respuesta,
-                            ensure_ascii=False
-                        ) + "\n"
-                    ).encode("utf-8")
+                if not isinstance(mensaje_recibido, dict):
+                    enviar_respuesta(comunicacion, {
+                        "resultado": "Error: formato de mensaje incorrecto."
+                    })
+                    continue
+
+                mensaje = mensaje_recibido.get("mensaje", "")
+
+                if not isinstance(mensaje, str):
+                    enviar_respuesta(comunicacion, {
+                        "resultado": "Error: el mensaje debe ser texto."
+                    })
+                    continue
+
+                mensaje = mensaje.strip()
+
+                if not mensaje:
+                    enviar_respuesta(comunicacion, {
+                        "resultado": "El mensaje no puede estar vacio."
+                    })
+                    continue
+
+                if mensaje.lower() in ("salir", "éxito", "exito"):
+                    enviar_respuesta(comunicacion, {
+                        "resultado": "Conexion finalizada."
+                    })
+                    break
+
+                id_mensaje, fecha = guardar_mensaje(
+                    mensaje, ip_cliente
                 )
-                comunicacion.flush()
+
+                if id_mensaje is None:
+                    enviar_respuesta(comunicacion, {
+                        "resultado": "Error al guardar el mensaje en SQLite."
+                    })
+                    continue
+
+                print(
+                    f"[RECIBIDO] Mensaje #{id_mensaje} "
+                    f"de {ip_cliente}: {mensaje}"
+                )
+
+                cola_respuesta = queue.Queue(maxsize=1)
+
+                cola_tareas.put((
+                    mensaje,
+                    id_mensaje,
+                    cola_respuesta
+                ))
+
+                resultado = cola_respuesta.get()
+
+                enviar_respuesta(comunicacion, {
+                    "id": id_mensaje,
+                    "fecha": fecha,
+                    "mensaje": mensaje,
+                    "resultado": resultado
+                })
 
     except OSError as error:
-        print(f"[ERROR] Comunicacion con {identificador}: {error}")
+        print(f"Error de comunicacion con {direccion}: {error}")
 
     finally:
         conexion.close()
-        print(f"[DESCONECTADO] {identificador} desconectado.")
+        print(f"[CIERRE] Cliente desconectado: {direccion}")
 
 
 def iniciar_servidor():
-    """Inicia el servidor y espera conexiones."""
-
-    global contador_clientes
+    if not inicializar_base_datos():
+        return
 
     servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -268,65 +287,48 @@ def iniciar_servidor():
 
         servidor.bind((HOST, PUERTO))
         servidor.listen()
-        servidor.settimeout(1)
 
-        # Iniciamos el hilo que distribuye las tareas.
         hilo_distribuidor = threading.Thread(
             target=distribuir_tareas,
             daemon=True
         )
         hilo_distribuidor.start()
 
-        print("\n" + "=" * 60)
-        print("                  SERVIDOR DE TAREAS")
-        print("=" * 60)
-        print(f"Direccion IP          : {HOST}")
-        print(f"Puerto                : {PUERTO}")
-        print(f"Cantidad de Workers   : {len(workers)}")
-        print("Hilos por Worker      : 2")
-        print("Total de hilos de procesamiento: 4")
-        print("-" * 60)
-        print("[ESTADO] Servidor iniciado correctamente.")
-        print("[ESTADO] Esperando conexiones de clientes.")
-        print("[AYUDA] Para detener el servidor, presione Ctrl+C.")
-        print("=" * 60)
+        print("----------------------------------------")
+        print(f"Servidor iniciado en {HOST}:{PUERTO}")
+        print("Aplicacion: chat cliente-servidor")
+        print("Workers: 2 grupos con 2 hilos cada uno")
+        print("Cola: queue de Python")
+        print("Base de datos: SQLite (chat.db)")
+        print("Para detenerlo, presione Ctrl+C.")
+        print("----------------------------------------")
 
         while True:
-            try:
-                conexion, direccion = servidor.accept()
+            conexion, direccion = servidor.accept()
 
-                with lock_contadores:
-                    contador_clientes += 1
-                    numero_cliente = contador_clientes
-
-                # Cada cliente es atendido en un hilo independiente.
-                hilo_cliente = threading.Thread(
-                    target=atender_cliente,
-                    args=(conexion, direccion, numero_cliente),
-                    daemon=True
-                )
-                hilo_cliente.start()
-
-            except socket.timeout:
-                continue
+            hilo_cliente = threading.Thread(
+                target=atender_cliente,
+                args=(conexion, direccion),
+                daemon=True
+            )
+            hilo_cliente.start()
 
     except KeyboardInterrupt:
-        print("\n\n" + "=" * 60)
-        print("[CIERRE] Solicitud de detencion recibida.")
-        print("[CIERRE] Cerrando el servidor...")
-        print("=" * 60)
+        print("\nDeteniendo el servidor...")
 
     except OSError as error:
-        print(f"\n[ERROR] No se pudo iniciar o ejecutar el servidor: {error}")
+        print("Error al iniciar el servidor:", error)
 
     finally:
         servidor.close()
 
-        # Esperamos que terminen las tareas que ya estan ejecutandose.
+        # Espera a que se vacíe la cola antes de cerrar los Workers.
+        cola_tareas.join()
+
         for worker in workers:
             worker.shutdown(wait=True)
 
-        print("[ESTADO] Servidor detenido.")
+        print("Servidor detenido.")
 
 
 if __name__ == "__main__":

@@ -1,103 +1,87 @@
+# PFO 3 - Diagrama de Arquitectura Distribuida
 
-# Diagrama de arquitectura distribuida
+## 1. Objetivo
 
-El siguiente diagrama representa la arquitectura propuesta
-para el sistema distribuido.
+El objetivo de este diagrama es representar la arquitectura propuesta para adaptar el chat del PFO 1 a un sistema distribuido cliente-servidor.
 
-![Diagrama de arquitectura distribuida](diagrama/diagrama.png)
-
-# Diagrama de arquitectura distribuida
-
-## 1. Introducción
-
-En este documento se presenta el diagrama de arquitectura propuesto para el sistema distribuido correspondiente al trabajo práctico.
-
-La idea principal es mostrar cómo se podrían organizar los diferentes componentes de un sistema cliente-servidor para recibir solicitudes, distribuir las tareas entre distintos servidores y devolver los resultados a los clientes.
-
-En un sistema distribuido, las tareas no tienen que ser realizadas necesariamente por un único programa o una sola computadora. Se pueden repartir entre diferentes componentes que trabajan de manera coordinada. Esto permite organizar mejor el procesamiento y facilita la posibilidad de ampliar el sistema si aumenta la cantidad de usuarios o de solicitudes.
+El diseño contempla clientes que envían mensajes, servidores que procesan las solicitudes, una cola de mensajes para distribuir las tareas y sistemas de almacenamiento para conservar la información.
 
 ## 2. Diagrama de arquitectura
 
-El diagrama representa una arquitectura de referencia que incluye clientes, un balanceador de carga, servidores trabajadores, una cola de mensajes, una base de datos y un sistema para almacenar archivos.
+El siguiente diagrama representa los componentes principales de la arquitectura propuesta y la comunicación entre ellos.
 
-Cada uno de estos componentes cumple una función determinada dentro del sistema. En conjunto, permiten representar una posible solución para procesar solicitudes de manera distribuida.
+![Diagrama de arquitectura distribuida](diagrama/diagrama.png)
 
-## 3. Descripción de los componentes
+## 3. Componentes del sistema
 
-### 3.1. Clientes
+### 3.1. Clientes web y móviles
 
-Los clientes son los programas o dispositivos desde los cuales los usuarios realizan solicitudes al sistema. Pueden ser, por ejemplo, una computadora, una aplicación web o un celular.
+Son las aplicaciones utilizadas por los usuarios para enviar mensajes al servidor y recibir las respuestas correspondientes.
 
-El cliente envía una solicitud y espera recibir una respuesta con el resultado del procesamiento. En la implementación realizada para este trabajo, se utiliza un programa en Python que se conecta al servidor mediante sockets y envía una tarea para que sea procesada.
+En la implementación actual, el cliente está desarrollado en Python.
 
-### 3.2. Balanceador de carga: Nginx o HAProxy
+### 3.2. Balanceador de carga
 
-El balanceador de carga es un componente que permite distribuir las solicitudes recibidas entre diferentes servidores.
+Se propone utilizar Nginx o HAProxy para distribuir las conexiones entrantes entre diferentes servidores.
 
-Por ejemplo, si existen varios servidores disponibles, el balanceador puede enviar una solicitud a uno de ellos y otra solicitud a otro. De esta manera, se busca evitar que todo el trabajo quede concentrado en un solo servidor.
+Esto permitiría repartir la carga de trabajo y evitar que todas las solicitudes dependan de un único servidor.
 
-En el diagrama se mencionan Nginx y HAProxy porque son herramientas que pueden utilizarse para cumplir esta función. Para este trabajo se muestran como parte de la arquitectura propuesta, pero no se instalaron ni se utilizaron en el programa desarrollado.
+### 3.3. Servidores Workers
 
-### 3.3. Servidores trabajadores
+Son los servidores encargados de recibir las solicitudes y procesar los mensajes enviados por los clientes.
 
-Los servidores trabajadores son los encargados de realizar las tareas que reciben del sistema. En una arquitectura distribuida se pueden utilizar varios servidores para repartir el procesamiento.
+Cada servidor puede disponer de un grupo de hilos (*pool de hilos*) para ejecutar varias tareas concurrentemente.
 
-Cada servidor puede contar con un grupo de hilos que permita ejecutar más de una tarea. Los hilos son una forma de realizar diferentes trabajos dentro de un mismo programa, sin necesidad de iniciar un programa completamente separado para cada tarea.
+En la implementación actual, se utilizan dos grupos de Workers, cada uno con dos hilos, dentro del mismo proceso Python.
 
-En la implementación de Python se utiliza `ThreadPoolExecutor` para organizar la ejecución de las tareas mediante grupos de trabajadores. Para representar la arquitectura propuesta, el diagrama muestra dos servidores trabajadores. En el programa realizado, estos grupos de trabajadores se simulan dentro de un mismo servidor y no son dos computadoras independientes.
+### 3.4. Cola de mensajes
 
-### 3.4. Cola de mensajes: RabbitMQ
+Se propone utilizar RabbitMQ para organizar las tareas pendientes y permitir que distintos servidores intercambien y distribuyan el trabajo.
 
-Una cola de mensajes permite guardar solicitudes pendientes para que puedan ser procesadas cuando corresponda. Esto ayuda a separar la recepción de las tareas de su procesamiento.
+En el programa desarrollado se utiliza `queue` de Python, que cumple la función de organizar las tareas dentro del servidor, pero no reemplaza todas las capacidades de RabbitMQ.
 
-Por ejemplo, si llegan varias solicitudes en poco tiempo, las tareas pueden quedar esperando en una cola hasta que los trabajadores estén disponibles. Así se puede organizar mejor el trabajo y evitar que las solicitudes se pierdan por intentar procesarlas todas al mismo tiempo.
+### 3.5. Base de datos
 
-En el diagrama se utiliza RabbitMQ como ejemplo de una herramienta que puede cumplir esta función. En el código desarrollado para este trabajo se utiliza la cola `queue` de Python. Por lo tanto, RabbitMQ forma parte del diseño conceptual y no de la implementación realizada.
+Se propone PostgreSQL como alternativa para una arquitectura distribuida ampliada, donde varios servidores necesiten acceder a una base de datos compartida.
 
-### 3.5. Base de datos: PostgreSQL
+La implementación actual conserva SQLite, mediante el archivo `chat.db`, para almacenar los mensajes recibidos y los resultados de su procesamiento.
 
-Una base de datos permite guardar información para poder consultarla y utilizarla posteriormente. En un sistema de este tipo podría almacenar, por ejemplo, usuarios, solicitudes, resultados y otros datos necesarios para el funcionamiento de la aplicación.
+### 3.6. Almacenamiento de archivos
 
-PostgreSQL es un sistema de gestión de bases de datos que se puede utilizar para almacenar esa información de forma organizada.
+Se propone utilizar S3 o MinIO para almacenar archivos y recursos adicionales si el sistema los necesitara.
 
-En esta propuesta se incluye PostgreSQL como una posible solución para una versión más completa del sistema. Sin embargo, el programa de Python desarrollado para esta entrega no utiliza PostgreSQL ni necesita una base de datos para realizar las operaciones de prueba.
+Este componente forma parte del diseño conceptual y no está implementado en el programa actual.
 
-### 3.6. Almacenamiento de archivos: S3 o MinIO
+## 4. Flujo de funcionamiento
 
-En algunas aplicaciones es necesario guardar archivos, documentos, imágenes u otros elementos que no conviene manejar directamente como parte de los mensajes de las solicitudes.
+El flujo de las solicitudes se desarrolla de la siguiente manera:
 
-Para esa función se puede utilizar un sistema de almacenamiento de objetos, como Amazon S3 o MinIO. Estos servicios permiten almacenar archivos y recuperarlos cuando sea necesario.
+1. Un cliente envía un mensaje.
+2. El balanceador de carga distribuye la solicitud hacia uno de los servidores disponibles.
+3. El servidor recibe el mensaje y lo registra en la base de datos.
+4. La tarea se incorpora a una cola de mensajes.
+5. Un Worker toma la tarea y procesa el mensaje.
+6. El resultado del procesamiento se registra en la base de datos.
+7. El servidor devuelve la respuesta al cliente que realizó la solicitud.
 
-En el diagrama se incluyen como parte de la arquitectura propuesta, pero no se implementaron en el programa desarrollado para este trabajo práctico.
+En la implementación actual, los pasos relacionados con el balanceador y los servidores independientes se representan conceptualmente. El programa utiliza un único servidor Python, una cola local y dos grupos de Workers.
 
-## 4. Funcionamiento general de la arquitectura
+## 5. Diferencia entre el diseño y la implementación
 
-El funcionamiento propuesto puede explicarse de la siguiente manera:
+El diagrama representa una arquitectura distribuida ampliada, mientras que el código desarrollado implementa una versión simplificada para demostrar sus mecanismos principales.
 
-1. El cliente genera una solicitud y la envía al sistema.
-2. El balanceador de carga recibe la solicitud y la dirige hacia uno de los servidores trabajadores disponibles.
-3. La tarea puede colocarse en una cola de mensajes para organizar su procesamiento.
-4. Los trabajadores toman las tareas pendientes y realizan las operaciones correspondientes.
-5. Si la tarea necesita consultar o guardar información, los componentes del sistema podrían utilizar la base de datos.
-6. Si se necesita almacenar un archivo, se podría utilizar el sistema de almacenamiento correspondiente.
-7. Una vez finalizado el procesamiento, el resultado debe regresar al cliente que realizó la solicitud.
-
-Esta descripción representa el funcionamiento general que se busca con la arquitectura propuesta. La forma exacta de comunicación entre los componentes dependerá de cómo se implemente cada uno.
-
-## 5. Relación con el programa desarrollado
-
-Para realizar este trabajo práctico se desarrolló una versión simplificada en Python, utilizando sockets, hilos, colas y grupos de trabajadores.
-
-El cliente se conecta al servidor mediante una conexión TCP y envía una tarea en formato JSON. El servidor recibe el mensaje, organiza la tarea en una cola y la asigna a un grupo de trabajadores para su procesamiento. Una vez obtenido el resultado, el servidor lo devuelve al cliente.
-
-De esta manera, se ponen en práctica algunos conceptos importantes de los sistemas distribuidos, como la comunicación entre procesos, la atención de conexiones de clientes y la distribución de tareas entre trabajadores.
-
-Es importante aclarar que el programa realizado no implementa todos los componentes que aparecen en el diagrama. El balanceador Nginx o HAProxy, RabbitMQ, PostgreSQL y S3 o MinIO se incluyen como parte del diseño conceptual de una posible arquitectura más completa. La implementación de esta entrega se concentra en los conceptos que se pueden demostrar con Python y sus herramientas de concurrencia y comunicación.
+| Componente | Diseño conceptual | Implementación actual |
+|---|---|---|
+| Clientes | Web y móviles | Cliente Python |
+| Balanceador | Nginx o HAProxy | No implementado |
+| Servidores | Varios servidores independientes | Un servidor Python |
+| Workers | Grupos de hilos por servidor | Dos grupos de dos hilos |
+| Cola de mensajes | RabbitMQ | `queue` de Python |
+| Base de datos | PostgreSQL | SQLite |
+| Almacenamiento | S3 o MinIO | No implementado |
 
 ## 6. Conclusión
 
-A partir de este trabajo se puede observar que un sistema distribuido requiere organizar la comunicación entre sus componentes y definir qué función cumple cada uno.
+La arquitectura propuesta permite visualizar cómo podría ampliarse el chat del PFO 1 para distribuir el procesamiento entre varios servidores.
 
-La utilización de varios trabajadores permite repartir el procesamiento, mientras que las colas ayudan a ordenar las tareas pendientes. Por otro lado, un balanceador de carga puede distribuir las solicitudes entre distintos servidores, y una base de datos y un sistema de almacenamiento permiten conservar la información necesaria.
-
-La implementación desarrollada en Python representa una versión inicial y simplificada de esta idea. Aunque no incluye todas las herramientas mencionadas en el diagrama, permite comprender y poner en práctica algunos de los conceptos fundamentales para construir sistemas distribuidos.
+La implementación actual constituye una primera adaptación que incorpora comunicación mediante sockets TCP, almacenamiento persistente, una cola de tareas y procesamiento concurrente mediante Workers.
