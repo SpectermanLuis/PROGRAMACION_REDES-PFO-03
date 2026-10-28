@@ -15,8 +15,8 @@ PUERTO = 5000
 # Cola donde se guardan las tareas pendientes.
 cola_tareas = queue.Queue()
 
-# Creamos dos grupos de trabajadores.
-# Cada grupo puede ejecutar hasta dos tareas al mismo tiempo.
+# Creamos dos Workers.
+# Cada Worker dispone de un pool de dos hilos.
 workers = [
     ThreadPoolExecutor(max_workers=2),
     ThreadPoolExecutor(max_workers=2)
@@ -35,10 +35,8 @@ lock_contadores = threading.Lock()
 def procesar_tarea(tarea, numero_worker, numero_tarea):
     """Procesa una tarea recibida de un cliente."""
 
-    print(f"\n[PROCESAMIENTO] Tarea N.° {numero_tarea}")
-    print(f"              Grupo asignado: {numero_worker}")
-    print(f"              Operacion: {tarea}")
-    print(f"              Estado: iniciando procesamiento")
+    print(f"\n[WORKER {numero_worker}] Iniciando tarea N.° {numero_tarea}")
+    print(f"[WORKER {numero_worker}] Operacion recibida: {tarea}")
 
     # Simulamos una tarea que tarda un segundo.
     time.sleep(1)
@@ -62,16 +60,15 @@ def procesar_tarea(tarea, numero_worker, numero_tarea):
     except ValueError:
         resultado = "Error: debe ingresar dos numeros validos."
 
-    print(f"[FINALIZACION] Tarea N.° {numero_tarea}")
-    print(f"              Grupo: {numero_worker}")
-    print(f"              {resultado}")
+    print(f"[WORKER {numero_worker}] Tarea N.° {numero_tarea} finalizada.")
+    print(f"[RESULTADO] Tarea N.° {numero_tarea}: {resultado}")
     print("-" * 60)
 
     return resultado
 
 
 def distribuir_tareas():
-    """Asigna las tareas pendientes a los grupos de trabajadores."""
+    """Asigna las tareas pendientes a los Workers."""
 
     global contador_workers
 
@@ -79,7 +76,7 @@ def distribuir_tareas():
         tarea, cola_respuesta, numero_tarea = cola_tareas.get()
 
         try:
-            # Elegimos el grupo de trabajadores por turnos.
+            # Elegimos el Worker por turnos.
             with lock_workers:
                 numero_worker = contador_workers % len(workers)
                 contador_workers += 1
@@ -88,10 +85,10 @@ def distribuir_tareas():
 
             print(
                 f"[ASIGNACION] Tarea N.° {numero_tarea} "
-                f"asignada al Grupo {numero_grupo}."
+                f"asignada al Worker {numero_grupo}."
             )
 
-            # Enviamos la tarea al grupo seleccionado.
+            # Enviamos la tarea al pool de hilos del Worker seleccionado.
             trabajo = workers[numero_worker].submit(
                 procesar_tarea,
                 tarea,
@@ -99,7 +96,7 @@ def distribuir_tareas():
                 numero_tarea
             )
 
-            # Se ejecuta cuando termina el procesamiento.
+            # Esta funcion se ejecuta cuando termina el procesamiento.
             def completar_respuesta(
                 trabajo_terminado,
                 cola=cola_respuesta,
@@ -114,7 +111,7 @@ def distribuir_tareas():
 
                 print(
                     f"[RESPUESTA LISTA] Tarea N.° {numero}: "
-                    f"resultado disponible para el cliente."
+                    "resultado preparado para el cliente."
                 )
 
             trabajo.add_done_callback(completar_respuesta)
@@ -132,6 +129,7 @@ def atender_cliente(conexion, direccion, numero_cliente):
     """Atiende las tareas enviadas por un cliente."""
 
     identificador = f"Cliente {numero_cliente}"
+
     print(
         f"\n[CONEXION] {identificador} conectado desde "
         f"{direccion[0]}:{direccion[1]}"
@@ -202,8 +200,8 @@ def atender_cliente(conexion, direccion, numero_cliente):
                                 print(
                                     f"\n[TAREA RECIBIDA] N.° {numero_tarea}"
                                 )
-                                print(f"                Cliente: {numero_cliente}")
-                                print(f"                Operacion: {tarea}")
+                                print(f"[CLIENTE] {identificador}")
+                                print(f"[OPERACION] {tarea}")
 
                                 # Cola para recibir el resultado de esta tarea.
                                 cola_respuesta = queue.Queue(maxsize=1)
@@ -215,10 +213,10 @@ def atender_cliente(conexion, direccion, numero_cliente):
 
                                 print(
                                     f"[COLA] Tarea N.° {numero_tarea} "
-                                    "enviada para su distribucion."
+                                    "agregada a la cola de tareas."
                                 )
 
-                                # Esperamos el resultado del trabajador.
+                                # Esperamos el resultado del Worker.
                                 resultado = cola_respuesta.get()
 
                                 respuesta = {
@@ -226,8 +224,8 @@ def atender_cliente(conexion, direccion, numero_cliente):
                                 }
 
                                 print(
-                                    f"[ENVIO] Tarea N.° {numero_tarea}: "
-                                    "devolviendo resultado al cliente."
+                                    f"[ENVIO] Resultado de la tarea "
+                                    f"N.° {numero_tarea} enviado a {identificador}."
                                 )
 
                 except (json.JSONDecodeError, UnicodeDecodeError):
@@ -280,12 +278,12 @@ def iniciar_servidor():
         hilo_distribuidor.start()
 
         print("\n" + "=" * 60)
-        print("             SERVIDOR DE TAREAS")
+        print("                  SERVIDOR DE TAREAS")
         print("=" * 60)
-        print(f"Direccion IP       : {HOST}")
-        print(f"Puerto             : {PUERTO}")
-        print(f"Grupos de workers  : {len(workers)}")
-        print("Hilos por grupo    : 2")
+        print(f"Direccion IP          : {HOST}")
+        print(f"Puerto                : {PUERTO}")
+        print(f"Cantidad de Workers   : {len(workers)}")
+        print("Hilos por Worker      : 2")
         print("Total de hilos de procesamiento: 4")
         print("-" * 60)
         print("[ESTADO] Servidor iniciado correctamente.")
@@ -301,7 +299,7 @@ def iniciar_servidor():
                     contador_clientes += 1
                     numero_cliente = contador_clientes
 
-                # Cada cliente se atiende en un hilo independiente.
+                # Cada cliente es atendido en un hilo independiente.
                 hilo_cliente = threading.Thread(
                     target=atender_cliente,
                     args=(conexion, direccion, numero_cliente),
