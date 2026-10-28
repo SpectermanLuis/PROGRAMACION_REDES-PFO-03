@@ -23,31 +23,27 @@ para procesarlas.
 
 ## 3. Estructura de Archivos
 
+## Estructura del proyecto
 
+```text
 PFO3/
 |
-|-- servidor.py
-|   `-- Servidor que recibe las tareas y coordina su procesamiento.
+|-- servidor.py ................. Servidor que Recibe y distribuye las tareas.
 |
-|-- cliente.py
-|   `-- Cliente que envía tareas y recibe los resultados.
+|-- cliente.py .................. Cliente Envía tareas y recibe resultados.
 |
-|-- README.md
-|   `-- Presentación del trabajo y explicación de cómo ejecutarlo.
+|-- README.md ................... Documentación general del trabajo.
 |
-|-- diagrama.md
-|   `-- Explicación de la arquitectura distribuida propuesta.
+|-- diagrama.md ................. Explicación de la arquitectura propuesta.
 |
 |-- diagrama/
-|   `-- diagrama.png
-|       `-- Imagen del diagrama de arquitectura.
+|   `-- diagrama.png ............. Imagen del diagrama de arquitectura.
 |
-|-- imagenes/
-|   |-- pfo03-imagen01.png
-|   |   `-- Captura de pantalla servidor inciado.
-|   |
-|   `-- pfo03-imagen04.png
-|       `-- Captura de pantalla servidor y clientes procesando.
+`-- imagenes/
+    |-- pfo03-imagen01.png ....... Captura imagen servidor iniciado esperando.
+    |
+    `-- pfo03-imagen04.png ....... Captura imagen servidor y clientes procesando.
+```
 
 
 ## 4. Funcionamiento
