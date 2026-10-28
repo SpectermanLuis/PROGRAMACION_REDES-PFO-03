@@ -20,7 +20,37 @@ para procesarlas.
 - queue para organizar las tareas pendientes.
 - ThreadPoolExecutor para ejecutar tareas en paralelo.
 
-## 3. Funcionamiento
+
+## 3. Estructura de Archivos
+
+
+PFO3/
+|
+|-- servidor.py
+|   `-- Servidor que recibe las tareas y coordina su procesamiento.
+|
+|-- cliente.py
+|   `-- Cliente que envía tareas y recibe los resultados.
+|
+|-- README.md
+|   `-- Presentación del trabajo y explicación de cómo ejecutarlo.
+|
+|-- diagrama.md
+|   `-- Explicación de la arquitectura distribuida propuesta.
+|
+|-- diagrama/
+|   `-- diagrama.png
+|       `-- Imagen del diagrama de arquitectura.
+|
+|-- imagenes/
+|   |-- pfo03-imagen01.png
+|   |   `-- Captura de pantalla servidor inciado.
+|   |
+|   `-- pfo03-imagen04.png
+|       `-- Captura de pantalla servidor y clientes procesando.
+
+
+## 4. Funcionamiento
 
 El cliente se conecta al servidor y envia una tarea.
 El servidor recibe la solicitud y la coloca en una cola.
@@ -33,7 +63,7 @@ al cliente mediante la misma conexion.
 
 Para finalizar, el cliente puede enviar la palabra SALIR.
 
-## 4. Ejecucion
+## 5. Ejecucion
 
 Se necesita tener Python instalado.
 
@@ -53,7 +83,7 @@ Para finalizar la conexion, ingresar:
 
     SALIR
 
-## 5. Arquitectura conceptual
+## 6. Arquitectura conceptual
 
 El diseño propuesto contempla:
 
@@ -68,10 +98,16 @@ Estos componentes se representan en el diagrama
 conceptual y no forman parte de la implementacion
 Python desarrollada en esta entrega.
 
-## 6. Pruebas
+## 7. Pruebas
 
 Se realizaran pruebas de conexion, envio de tareas,
 recepcion de resultados y manejo de entradas incorrectas.
 
 Se incorporaran capturas de pantalla para mostrar
 el funcionamiento de los programas.
+
+### Servidor inciado esperando
+![Servidor Esperando](imagenes/pfo03-imagen01.png)
+
+### Servidor y clientes procesando
+![Servidor y Clientes Procesando](imagenes/pfo03-imagen04.png)
