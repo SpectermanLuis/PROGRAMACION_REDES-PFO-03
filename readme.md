@@ -42,7 +42,9 @@ PFO3/
 `-- imagenes/
     |-- pfo03-imagen01.png ....... Captura imagen servidor iniciado esperando.
     |
-    `-- pfo03-imagen04.png ....... Captura imagen servidor y clientes procesando.
+    |-- pfo03-imagen02.png ....... Captura imagen clientes iniciados esperando.
+
+    `-- pfo03-imagen03.png ....... Captura imagen servidor y clientes procesando.
 ```
 
 
@@ -105,5 +107,8 @@ el funcionamiento de los programas.
 ### Servidor inciado esperando
 ![Servidor Esperando](imagenes/pfo03-imagen01.png)
 
-### Servidor y clientes procesando
-![Servidor y Clientes Procesando](imagenes/pfo03-imagen04.png)
+### Clientes iniciados esperando
+![Clientes iniciados en espera](imagenes/pfo03-imagen02.png)
+
+### Servidos y Clientes procesando
+![Servidor y Clientes procesando](imagenes/pfo03-imagen03.png)
