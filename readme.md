@@ -61,6 +61,17 @@ al cliente mediante la misma conexion.
 
 Para finalizar, el cliente puede enviar la palabra SALIR.
 
+
+### Ejemplo de tarea implementada
+
+Para demostrar el funcionamiento del sistema cliente-servidor, se implementó como ejemplo una operación de suma entre dos números.
+
+La suma se utiliza únicamente como una tarea de prueba sencilla, que permite verificar el envío de solicitudes desde los clientes, la recepción y distribución de las tareas por parte del servidor, su procesamiento mediante los Workers y la devolución del resultado al cliente.
+
+El sistema está planteado para demostrar estos mecanismos de comunicación y procesamiento. La operación de suma es un ejemplo práctico y no constituye una limitación de la arquitectura propuesta.
+
+
+
 ## 5. Ejecucion
 
 Se necesita tener Python instalado.
@@ -80,6 +91,7 @@ Se puede ingresar una suma, por ejemplo:
 Para finalizar la conexion, ingresar:
 
     SALIR
+
 
 ## 6. Arquitectura conceptual
 
